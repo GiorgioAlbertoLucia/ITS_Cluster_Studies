@@ -69,19 +69,24 @@ class ItsTpcDataPreprocessor(DataPreprocessor):
     def ParticleID(self):
         
         self.data = self.data.with_columns(
+            partPDG=np.nan,
             partID=np.nan,
             mass=np.nan,
             beta=np.nan
             )
         
-        for part in self.cfg['species']:    
+        for idx, part in enumerate(self.cfg['species']):    
             
             cfgTags = self.cfg['selTags'][part]
             self.data = self.data.with_columns(
+                partPDG=pl.when((pl.col(f'nSigmaAbs{part}') < cfgTags['selfSel']),
+                                (pl.col(f'nSigmaAbs{cfgTags["part1"]}') > cfgTags['part1Sel']),
+                                (pl.col(f'nSigmaAbs{cfgTags["part2"]}') > cfgTags['part2Sel']),
+                                (pl.col('p') < cfgTags['pmax'])).then(particlePDG[part]).otherwise(pl.col('partPDG')),
                 partID=pl.when((pl.col(f'nSigmaAbs{part}') < cfgTags['selfSel']),
                                 (pl.col(f'nSigmaAbs{cfgTags["part1"]}') > cfgTags['part1Sel']),
                                 (pl.col(f'nSigmaAbs{cfgTags["part2"]}') > cfgTags['part2Sel']),
-                                (pl.col('p') < cfgTags['pmax'])).then(particlePDG[part]).otherwise(pl.col('partID')),
+                                (pl.col('p') < cfgTags['pmax'])).then(idx).otherwise(pl.col('partID')),
                 mass=pl.when((pl.col(f'nSigmaAbs{part}') < cfgTags['selfSel']),
                                 (pl.col(f'nSigmaAbs{cfgTags["part1"]}') > cfgTags['part1Sel']),
                                 (pl.col(f'nSigmaAbs{cfgTags["part2"]}') > cfgTags['part2Sel']),

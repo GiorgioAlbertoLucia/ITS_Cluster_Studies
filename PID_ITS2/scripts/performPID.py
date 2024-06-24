@@ -44,7 +44,8 @@ def preprocess(cfgGeneral):
     dpRegression.ApplyCuts()
     dpRegression.ParticleID()
     dpRegression.CleanData()
-    #dpRegression.DropUnidentified()
+    dpRegression.DropUnidentified()
+    dpRegression.DefineWeights()
 
     TrainSet, TestSet = train_test_split(dpRegression.data, test_size=cfg['testSize'], random_state=cfg['randomState'])
 
@@ -118,8 +119,8 @@ def regression(cfgGeneral, TrainSet, TestSet):
         return regressor.model
 
     elif 'NN' in cfg['MLtype']:
-        #NNmodel = NeuralNetworkClassifier(cfg, outFile, [TrainSet, TrainSet['partID'], TestSet, TestSet['partID']], 'partID')
-        NNmodel = NeuralNetworkRegressor(cfg, outFile, [TrainSet, TrainSet['beta'], TestSet, TestSet['beta']], 'beta')
+        NNmodel = NeuralNetworkClassifier(cfg, outFile, [TrainSet, TrainSet['partID'], TestSet, TestSet['partID']], 'partID')
+        #NNmodel = NeuralNetworkRegressor(cfg, outFile, [TrainSet, TrainSet['beta'], TestSet, TestSet['beta']], 'beta')
         NNmodel.trainModel()
         NNmodel.testResults(cfgGeneral)
 
@@ -186,8 +187,9 @@ def performPID(cfgPath):
 
 if __name__ == '__main__':
     
-    cfgPath = '/home/galucia/ITS_Cluster_Studies/PID_ITS2/configs/cfgPID_general.yml'
+    ali50xlCfgPath = '/home/galucia/ITS_Cluster_Studies/PID_ITS2/configs/cfgPID_general.yml'
+    localCfgPath = '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/configs/cfgPID_general.yml'
     
-    performPID(cfgPath)
+    performPID(localCfgPath)
 
     print(color.BOLD+color.GREEN+'\nPID completed successfully!'+color.END)

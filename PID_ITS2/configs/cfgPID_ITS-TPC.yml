@@ -29,25 +29,41 @@ testSize:             0.2
 randomState:          42
 
 # Data
-inFiles:              ['/data/shared/pp23_relval_debug/0720/its_PIDStudy.root', '/data/shared/pp23_relval_debug/0730/its_PIDStudy.root']
-applicationFiles:     ['/data/shared/pp23_relval_debug/0740/its_PIDStudy.root', '/data/shared/pp23_relval_debug/0750/its_PIDStudy.root', '/data/shared/pp23_relval_debug/0800/its_PIDStudy.root']
 
-outFilePreprocess:    '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/preprocess.root'
-outFileRegression:    '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/regression.root'
-outFileOptuna:        '/home/galucia/ITS_Cluster_Studies/PID_ITS2/ml-models/optunaBestResults.txt'
-outFileApplication:   '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/application.root'
+#ali50xl paths
+#inFiles:              ['/data/shared/pp23_relval_debug/0720/its_PIDStudy.root', '/data/shared/pp23_relval_debug/0730/its_PIDStudy.root']
+#applicationFiles:     ['/data/shared/pp23_relval_debug/0740/its_PIDStudy.root', '/data/shared/pp23_relval_debug/0750/its_PIDStudy.root', '/data/shared/pp23_relval_debug/0800/its_PIDStudy.root']
+#
+#outFilePreprocess:    '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/preprocess.root'
+#outFileRegression:    '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/regression.root'
+#outFileOptuna:        '/home/galucia/ITS_Cluster_Studies/PID_ITS2/MLmodels/optunaBestResults.txt'
+#outFileApplication:   '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/application.root'
+#
+#saveFileTrain:        '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/saved/training.parquet'
+#saveFileTest:         '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/saved/testing.parquet'
+#saveFileApplication:  '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/saved/application.parquet'
 
-saveFileTrain:        '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/saved/training.parquet'
-saveFileTest:         '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/saved/testing.parquet'
-saveFileApplication:  '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/saved/application.parquet'
+# local paths
+inFiles:              ['/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/data/0720/its_PIDStudy.root', '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/data/0730/its_PIDStudy.root']
+applicationFiles:     ['/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/data/0740/its_PIDStudy.root', '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/data/0750/its_PIDStudy.root', '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/data/0800/its_PIDStudy.root']
+
+outFilePreprocess:    '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/preprocess.root'
+outFileRegression:    '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/regression.root'
+outFileOptuna:        '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/MLmodels/optunaBestResults.txt'
+outFileApplication:   '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/application.root'
+
+saveFileTrain:        '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/data/saved/training.parquet'
+saveFileTest:         '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/data/saved/testing.parquet'
+saveFileApplication:  '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/data/saved/application.parquet'
 
 # Preprocessing
 preprocess:  True
 
 # Training
 train:                  True
-MLtype:                 'XGB' # possible types: 'XGB', 'XGBoptuna', 'NN'
-modelFile:              '/home/galucia/ITS_Cluster_Studies/PID_ITS2/ml-models/modelITS-TPC.h5'
+MLtype:                 'NN' # possible types: 'XGB', 'XGBoptuna', 'NN'
+#modelFile:              '/home/galucia/ITS_Cluster_Studies/PID_ITS2/models/modelITS-TPC.h5'
+modelFile:              '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/models/modelITS-TPC.h5'
 
 regressionColumns: [ #'pTPC', 
                     'p', 
@@ -92,14 +108,15 @@ hyperparametersRange:   { 'max_depth':          [3, 15],
 # Neural Network
 NN:
   hiddenSize: 64
-  nEpochs: 1
+  nEpochs: 50
   batchSize: 128
-  nThreads: 40    # n cpus
-  learningRate: 0.003
+  nThreads: 10    # n cpus
+  learningRate: 0.001 #0.0001
   optimizer: 'adam'
   loss: 'mean_squared_error'
   metrics: ['mean_squared_error']
-  modelFile: '/home/galucia/ITS_Cluster_Studies/PID_ITS2/models/modelITS-TPC.h5'
+  #modelFile: '/home/galucia/ITS_Cluster_Studies/PID_ITS2/models/modelITS-TPC.h5'
+  modelFile: '/Users/glucia/Projects/ALICE/ITS_Cluster_Studies/PID_ITS2/models/modelITS-TPC.h5'
 
 weights: 
   type: 'PandSpecies'     # possible types: 'PandSpecies', 'None'

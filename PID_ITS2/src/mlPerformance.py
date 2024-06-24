@@ -398,13 +398,13 @@ class FCNN(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.out(x)
 
-        if self.mode == 'classification':    x = F.log_softmax(x, dim=1)
+        #if self.mode == 'classification':    x = F.log_softmax(x, dim=1)
 
         return x
 
 class CustomDataset(Dataset):
 
-    def __init__(self, data, cfg, target):
+    def __init__(self, data, cfg, target, mode, weights):
         '''
         Parameters
         ----------
@@ -412,28 +412,34 @@ class CustomDataset(Dataset):
             cfg (yml): configuration dictionary
             target (str): target column name (partID)
         '''
+
+        print(data.columns)
         
-        self.data = data
-        self.regressionData = data[cfg['regressionColumns']].to_numpy()
-        self.target = data[target].to_numpy()
+        self.regressionData = torch.tensor(data[cfg['regressionColumns']].to_numpy(), dtype=torch.float32)
+        self.target = torch.tensor(data[target].to_numpy(), dtype=torch.float32).reshape(-1, 1)
+        self.weights = None
+        if weights == 'PandSpecies': self.weights = torch.tensor(data['weightsPS'].to_numpy(), dtype=torch.float32).reshape(-1, 1)
 
-        #labelEncoder = LabelEncoder()
-        #self.target = labelEncoder.fit_transform(self.target)
+        if mode == 'classification':
+            
+            classesColumn = torch.tensor(data[target]).long()
+            print(torch.unique(classesColumn))
+            nClasses = len(torch.unique(classesColumn))
+            self.target = F.one_hot(classesColumn, num_classes=nClasses)
 
-        self.target = self.target.reshape(-1, 1)
-        
-        
+    def __len__(self):  return self.regressionData.shape[0]
 
-    def __len__(self):
-        return len(self.data)
+class WeightedMESLoss(nn.Module):
 
-    def __getitem__(self, idx):
-        sample = {
-            'regressionData': torch.tensor(self.regressionData[idx], dtype=torch.float),
-            'target': torch.tensor(self.target[idx], dtype=torch.float)
-        }
+    def __init__(self):                         super(WeightedMESLoss, self).__init__()
 
-        return sample
+    def forward(self, ypred, ytrue, weight):    return torch.mean(weight * (ypred - ytrue)**2)
+
+class WeightedCrossEntropyLoss(nn.Module):
+
+    def __init__(self):                         super(WeightedCrossEntropyLoss, self).__init__()
+
+    def forward(self, ypred, ytrue, weight):    return -torch.mean(weight * ytrue * torch.log(ypred.clamp_min(1e-8)))       
 
 
 class NeuralNetwork(ABC):
@@ -446,6 +452,7 @@ class NeuralNetwork(ABC):
         self.TestSet = TrainTestData[2]
         self.target = target
         self.TrainDataset = None
+        self.criterion = None
         self.losses = []
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -460,25 +467,66 @@ class NeuralNetwork(ABC):
     @abstractmethod
     def trainModel(self): 
 
-        trainLoader = DataLoader(self.TrainDataset, batch_size=self.cfg['NN']['batchSize'], shuffle=True)      
+        trainData = CustomDataset(self.TrainSet, self.cfg, self.target, 'regression')
+        testData = CustomDataset(self.TestSet, self.cfg, self.target, 'regression')
+        batchSize = self.cfg['NN']['batchSize']  
+
+        bestLoss = np.inf
+        bestWeights = None  # save best model weights    
 
         with alive_bar(title='Training neural network...') as bar:
             for epoch in range(self.cfg['NN']['nEpochs']):
-                for i, batch in enumerate(trainLoader):
 
-                    inputs, labels = batch['regressionData'], batch['target']
-                    outputs = self.model.forward(inputs)
-                    loss = self.criterion(outputs, labels)
+                self.model.train()
+                batchStart = 0
+
+                while batchStart < len(trainData):
                     
-                    if i == 0:  
-                        self.losses.append(loss.item())
-                        print(f'Epoch {epoch+1}/{self.cfg["NN"]["nEpochs"]}, Batch {i+1}/{len(trainLoader)}, Loss: {loss.item()}')
+                    Xbatch = trainData.regressionData[batchStart:batchStart+batchSize]
+                    ybatch = trainData.target[batchStart:batchStart+batchSize]
+
+                    ypred = self.model.forward(Xbatch)
+                    loss = self.criterion(ypred, ybatch)
 
                     self.optimizer.zero_grad()
                     loss.backward()
+
                     self.optimizer.step()
 
-                bar()
+                    batchStart += batchSize
+
+            # evaluate model on test set after each epoch
+            
+            self.model.eval()
+            ypred = self.model(testData.regressionData)
+            loss = self.criterion(ypred, testData.target)
+            loss = float(loss)
+            self.losses.append(loss)
+
+            if loss < bestLoss:
+                bestLoss = loss
+                bestWeights = self.model.state_dict()
+            
+            bar()
+        
+        self.model.load_state_dict(bestWeights)
+
+
+                #for i, batch in enumerate(trainLoader):
+#
+                #    inputs, labels = batch['regressionData'], batch['target']
+                #    outputs = self.model.forward(inputs)
+                #    loss = self.criterion(outputs, labels)
+                #    
+                #    if i == 0:  
+                #        self.losses.append(loss.item())
+                #        print(f'Epoch {epoch+1}/{self.cfg["NN"]["nEpochs"]}, Batch {i+1}/{len(trainLoader)}, Loss: {loss.item()}')
+#
+                #    self.optimizer.zero_grad()
+                #    loss.backward()
+                #    self.optimizer.step()
+#
+                #bar()
 
 
 class NeuralNetworkClassifier(NeuralNetwork):
@@ -494,44 +542,85 @@ class NeuralNetworkClassifier(NeuralNetwork):
         '''
         
         super().__init__(cfg, outFile, TrainTestData, target)
-        self.TrainDataset = CustomDataset(self.TrainSet, self.cfg, self.target)
+        self.trainData = CustomDataset(self.TrainSet, self.cfg, self.target, 'classification', weights=self.cfg['weights']['type'])
+        self.testData = CustomDataset(self.TestSet, self.cfg, self.target, 'classification', weights=self.cfg['weights']['type'])
 
-        print(self.TrainDataset.regressionData.shape)
-        print(self.TrainDataset.target.shape)
     
     def initializeModel(self):
+
+        self.learningRate = self.cfg['NN']['learningRate']
 
         self.model = FCNN('classification', len(self.cfg['regressionColumns']), self.cfg['NN']['hiddenSize'], len(self.cfg['species'])) #.to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learningRate)
         self.criterion = nn.CrossEntropyLoss()
-        #if cfg['weights']['type'] == 'PandSpecies':    self.criterion = nn.CrossEntropyLoss(weight=torch.tensor(self.TrainSet['weightsPS']))
+        if self.cfg['weights']['type'] == 'PandSpecies':    self.criterion = WeightedCrossEntropyLoss()
 
-    def trainModel(self):    super().trainModel()
+    def trainModel(self):    
+
+        batchSize = self.cfg['NN']['batchSize']  
+
+        bestLoss = 1e9
+        bestWeights = None  # save best model weights    
+
+        with alive_bar(title='Training neural network...') as bar:
+            for epoch in range(self.cfg['NN']['nEpochs']):
+
+                self.model.train()
+                batchStart = 0
+
+                while batchStart < len(self.trainData):
+
+                    Xbatch = self.trainData.regressionData[batchStart:batchStart+batchSize]
+                    ybatch = self.trainData.target[batchStart:batchStart+batchSize]
+                    wbatch = self.trainData.weights[batchStart:batchStart+batchSize]         #weights
+
+                    ypred = self.model.forward(Xbatch)
+                    #loss = self.criterion(ypred, ybatch)
+                    loss = self.criterion(ypred, ybatch, wbatch)
+
+                    self.optimizer.zero_grad()
+                    loss.backward()
+
+                    self.optimizer.step()
+
+                    batchStart += batchSize
+
+                # evaluate model on test set after each epoch
+
+                self.model.eval()
+                ypred = self.model(self.testData.regressionData)
+                loss = self.criterion(ypred, self.testData.target, self.testData.weights)
+                loss = loss.item()
+                self.losses.append(loss)
+
+                if epoch == 0:  print(ypred)
+
+                print(f'Epoch {epoch+1}/{self.cfg["NN"]["nEpochs"]}, Loss: {loss}')
+                print(f'Best loss: {bestLoss}')
+                if loss < bestLoss:
+                    print('New best loss')
+                    bestLoss = loss
+                    bestWeights = self.model.state_dict()
+
+                bar()
+        
+            self.model.load_state_dict(bestWeights)
     
     def testResults(self, cfgGeneral):
 
-        testDataset = CustomDataset(self.TestSet, self.cfg, 'partID')
-        testLoader = DataLoader(testDataset, batch_size=self.cfg['NN']['batchSize'], shuffle=True)
-
-        self.model.eval()
-
         predictions = []
 
-        with torch.no_grad():
-            for batch in testLoader:
-                inputs, labels = batch['regressionData'], batch['target']
+        self.model.eval()
+        ypred = self.model(self.testData.regressionData)
+        loss = self.criterion(ypred, self.testData.target, self.testData.weights)
+        loss = loss.item()
 
-                outputs = self.model(inputs)
-                probabilities = torch.softmax(outputs, dim=1)
-
-                predictions.append(probabilities)
-        
-        predictions = torch.cat(predictions, dim=0)
         print([f'prob{part}' for part in self.cfg['species']])
-        predictionsDf = pl.DataFrame(np.swapaxes(predictions.numpy(), 0, 1), schema=[f'prob{part}' for part in self.cfg['species']])
+        ypredDf = pl.DataFrame(np.swapaxes(ypred.detach().numpy(), 0, 1), schema=[f'prob{part}' for part in self.cfg['species']])
+        self.TestSet = pl.concat([self.TestSet, ypredDf], how='horizontal')
 
-        self.TestSet = pl.concat([self.TestSet, predictionsDf], how='horizontal')
-        print(self.TestSet.columns)
+        for part in self.cfg['species']:
+            print(self.TestSet[f'prob{part}'].describe())
 
         # visualize regression results
         directory = self.outFile.mkdir('regression')
@@ -571,6 +660,12 @@ class NeuralNetworkRegressor(NeuralNetwork):
         self.TrainDataset = None
         self.losses = []
 
+        self.regressionDirectory = self.outFile.mkdir('regression')
+        self.particleDirectories = {}
+        for particle in self.cfg['species']:
+            dir = self.outFile.mkdir(f'{particle}_regression')
+            self.particleDirectories[particle] = dir
+
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         torch.manual_seed(cfg['randomState'])
         torch.set_num_threads(self.cfg['NN']['nThreads'])
@@ -578,11 +673,8 @@ class NeuralNetworkRegressor(NeuralNetwork):
         self.initializeModel()
 
         #super().__init__(cfg, outFile, TrainTestData, target)
-        self.TrainDataset = CustomDataset(self.TrainSet, self.cfg, self.target)
-
-        print(self.TrainDataset.regressionData.shape)
-        print(self.TrainDataset.target.shape)
-
+        self.trainData = CustomDataset(self.TrainSet, self.cfg, self.target, 'regression', weights=self.cfg['weights']['type'])
+        self.testData = CustomDataset(self.TestSet, self.cfg, self.target, 'regression', weights=self.cfg['weights']['type'])
         self.initializeModel()
     
     def initializeModel(self):
@@ -591,56 +683,72 @@ class NeuralNetworkRegressor(NeuralNetwork):
 
         self.model = FCNN('regression', len(self.cfg['regressionColumns']), self.cfg['NN']['hiddenSize'], 1) #.to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learningRate)
-        self.criterion = nn.MSELoss()
+        #self.criterion = nn.MSELoss()
+        self.criterion = WeightedMESLoss()
 
-    def trainModel(self):   # super().trainModel()
+    def trainModel(self):   
 
-        trainLoader = DataLoader(self.TrainDataset, batch_size=self.cfg['NN']['batchSize'], shuffle=True)      
+        batchSize = self.cfg['NN']['batchSize']  
+
+        bestLoss = 1e9
+        bestWeights = None  # save best model weights    
 
         with alive_bar(title='Training neural network...') as bar:
             for epoch in range(self.cfg['NN']['nEpochs']):
-                for i, batch in enumerate(trainLoader):
 
-                    inputs, labels = batch['regressionData'], batch['target']
-                    outputs = self.model.forward(inputs)
-                    loss = self.criterion(outputs, labels)
-                    
-                    if i == 0:  
-                        self.losses.append(loss.item())
-                        print(f'Epoch {epoch+1}/{self.cfg["NN"]["nEpochs"]}, Batch {i+1}/{len(trainLoader)}, Loss: {loss.item()}')
+                self.model.train()
+                batchStart = 0
+
+                while batchStart < len(self.trainData):
+
+                    Xbatch = self.trainData.regressionData[batchStart:batchStart+batchSize]
+                    ybatch = self.trainData.target[batchStart:batchStart+batchSize]
+                    wbatch = self.trainData.weights[batchStart:batchStart+batchSize]         #weights
+
+                    ypred = self.model.forward(Xbatch)
+                    #loss = self.criterion(ypred, ybatch)
+                    loss = self.criterion(ypred, ybatch, wbatch)
 
                     self.optimizer.zero_grad()
                     loss.backward()
+
                     self.optimizer.step()
 
+                    batchStart += batchSize
+
+                # evaluate model on test set after each epoch
+
+                self.model.eval()
+                ypred = self.model(self.testData.regressionData)
+                loss = self.criterion(ypred, self.testData.target, self.testData.weights)
+                loss = loss.item()
+                self.losses.append(loss)
+
+                print(f'Epoch {epoch+1}/{self.cfg["NN"]["nEpochs"]}, Loss: {loss}')
+                print(f'Best loss: {bestLoss}')
+                if loss < bestLoss:
+                    print('New best loss')
+                    bestLoss = loss
+                    bestWeights = self.model.state_dict()
+
                 bar()
+        
+            self.model.load_state_dict(bestWeights)
     
     def testResults(self, cfgGeneral):
 
-        testDataset = CustomDataset(self.TestSet, self.cfg, 'partID')
-        testLoader = DataLoader(testDataset, batch_size=self.cfg['NN']['batchSize'], shuffle=True)
-
-        self.model.eval()
-
-        betaML = []
-
-        with torch.no_grad():
-            for batch in testLoader:
-                inputs, labels = batch['regressionData'], batch['target']
-
-                outputs = self.model(inputs)
-                output = torch.softmax(outputs, dim=1)
-
-                betaML.append(output.numpy())
+        self.testData = CustomDataset(self.TestSet, self.cfg, self.target, 'regression', weights=self.cfg['weights']['type'])
         
-        # test regression model
-        #betaML = np.swapaxes(torch.cat(betaML, dim=0).numpy(), 0, 1)
-        betaML = np.concatenate(betaML, axis=0)
+        self.model.eval()
+        betaML = self.model(self.testData.regressionData)
+        print(betaML)
+        betaML = betaML.detach().numpy().reshape(-1)
         print(betaML)
 
         self.TestSet = self.TestSet.with_columns(pl.Series(name='betaML', values=betaML))
-        print(self.TestSet.columns)
         self.TestSet = self.TestSet.with_columns(deltaBeta=((pl.col('betaML') - pl.col('beta')) / pl.col('beta')))
+        print(self.TestSet['betaML'])
+
 
         # visualize regression results
         dv = DataVisual(self.TestSet, self.regressionDirectory, cfgGeneral['cfgVisualFile'])
@@ -665,11 +773,11 @@ class NeuralNetworkRegressor(NeuralNetwork):
 
             del dv 
 
+        self.outFile.cd()
         graph = TGraph(len(self.losses), np.asarray(np.arange(self.cfg['NN']['nEpochs']), dtype=float), np.asarray(self.losses, dtype=float))
+        graph.SetName('loss')
         graph.SetTitle(r'; Epoch ; Loss')
-        graph.Write('loss')
-        
-        del directory, dv
+        graph.Write()
 
 
 
