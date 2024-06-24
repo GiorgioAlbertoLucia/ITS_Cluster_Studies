@@ -107,7 +107,7 @@ def regression(cfgGeneral, TrainSet, TestSet):
         regressor.trainModel()
         regressor.visualizeResults(cfgGeneral)
         regressor.applyOnTrainSet(cfgGeneral)
-        #regressor.saveModel()
+        regressor.saveModel()
 
         # save datasets
         print('Saving training set to '+color.UNDERLINE+color.BLUE+f'{cfg["saveFileTrain"]}'+color.END)

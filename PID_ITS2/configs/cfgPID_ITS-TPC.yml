@@ -34,7 +34,7 @@ applicationFiles:     ['/data/shared/pp23_relval_debug/0740/its_PIDStudy.root', 
 
 outFilePreprocess:    '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/preprocess.root'
 outFileRegression:    '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/regression.root'
-outFileOptuna:        '/home/galucia/ITS_Cluster_Studies/PID_ITS2/MLmodels/optunaBestResults.txt'
+outFileOptuna:        '/home/galucia/ITS_Cluster_Studies/PID_ITS2/ml-models/optunaBestResults.txt'
 outFileApplication:   '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/ITS-TPC/application.root'
 
 saveFileTrain:        '/home/galucia/ITS_Cluster_Studies/PID_ITS2/data/saved/training.parquet'
@@ -46,8 +46,8 @@ preprocess:  True
 
 # Training
 train:                  True
-MLtype:                 'NN' # possible types: 'XGB', 'XGBoptuna', 'NN'
-modelFile:              '/home/galucia/ITS_Cluster_Studies/PID_ITS2/models/modelITS-TPC.h5'
+MLtype:                 'XGB' # possible types: 'XGB', 'XGBoptuna', 'NN'
+modelFile:              '/home/galucia/ITS_Cluster_Studies/PID_ITS2/ml-models/modelITS-TPC.h5'
 
 regressionColumns: [ #'pTPC', 
                     'p', 

@@ -11,6 +11,7 @@ from alive_progress import alive_bar
 import xgboost as xgb
 import optuna
 import shap
+import pickle
 #shap.initjs()
 
 import torch
@@ -192,7 +193,9 @@ class Regressor(ABC):
     def applyOnTrainSet(self, cfgGeneral): pass
 
     @abstractmethod
-    def saveModel(self):        pass
+    def saveModel(self):        
+
+        with open(self.cfg['modelFile'], 'wb') as f:    pickle.dump(self.model, f)
 
     @classmethod
     def createRegressor(cls, cfg, outFile, TrainTestData):
